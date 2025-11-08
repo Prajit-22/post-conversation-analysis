@@ -1,0 +1,10 @@
+{
+  "title": "Customer Order Inquiry",
+  "messages": [
+    {"sender": "user", "message": "Hi, I need help with my order."},
+    {"sender": "ai", "message": "Sure, can you please share your order ID?"},
+    {"sender": "user", "message": "It's 12345."},
+    {"sender": "ai", "message": "Thanks! Your order has been shipped and will arrive tomorrow."},
+    {"sender": "user", "message": "Great, thank you so much!"}
+  ]
+}
