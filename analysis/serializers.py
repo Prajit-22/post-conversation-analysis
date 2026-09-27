@@ -2,9 +2,13 @@ from rest_framework import serializers
 from .models import Conversation, Message, ConversationAnalysis
 
 class MessageSerializer(serializers.ModelSerializer):
+    # The public API exposes the model's `text` field as `message`, matching
+    # the analyzer input format and sample_data/sample_conversation.json.
+    message = serializers.CharField(source='text')
+
     class Meta:
         model = Message
-        fields = ['id', 'sender', 'text', 'timestamp']
+        fields = ['id', 'sender', 'message', 'timestamp']
         read_only_fields = ['id', 'timestamp']
 
 class ConversationSerializer(serializers.ModelSerializer):
