@@ -3,6 +3,7 @@
 __pycache__/
 env/
 venv/
+.venv/
 *.pyo
 *.pyd
 .Python
@@ -13,6 +14,10 @@ db.sqlite3
 static/
 media/
 .env
+
+# Celery / Redis runtime artifacts
+celerybeat-schedule*
+dump.rdb
 
 # IDE/editor
 .vscode/
