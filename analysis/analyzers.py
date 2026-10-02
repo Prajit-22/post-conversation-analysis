@@ -12,7 +12,7 @@ install and in CI.
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from textblob import TextBlob
@@ -61,7 +61,11 @@ EMPATHY_PATTERNS = [
 
 HEDGE_PATTERNS = ["i think", "maybe", "perhaps", "probably", "not sure", "might be"]
 
-QUESTION_HINTS = ('?', 'how', 'what', 'why', 'when', 'where', 'which', 'can you', 'could you')
+# Question words must match whole words: a bare substring test treats "show"
+# as "how" and "whenever" as "when", counting statements as unanswered questions.
+_QUESTION_RE = re.compile(
+    r"\b(?:how|what|why|when|where|which|can you|could you)\b"
+)
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
@@ -157,7 +161,7 @@ def _completeness(messages: List[Dict], fallback_count: int) -> float:
         if msg.get('sender') != 'user':
             continue
         text = msg['message'].lower()
-        is_question = text.strip().endswith('?') or any(h in text for h in QUESTION_HINTS)
+        is_question = '?' in text or bool(_QUESTION_RE.search(text))
         if not is_question:
             continue
         asked += 1
@@ -192,9 +196,14 @@ def _avg_response_time(messages: List[Dict]) -> float:
     """Mean seconds from a user turn to the next AI turn, when ISO timestamps exist."""
     def parse(ts: str) -> Optional[datetime]:
         try:
-            return datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+            parsed = datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
         except (ValueError, TypeError):
             return None
+        if parsed.tzinfo is None:
+            # Naive timestamps are read as UTC so they can be compared with
+            # offset-aware ones in the same conversation.
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
 
     deltas = []
     for i, msg in enumerate(messages):
