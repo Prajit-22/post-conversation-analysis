@@ -107,6 +107,7 @@ python manage.py test
 
 The suite covers the analyzer contract (score ranges, key completeness),
 metric behavior (positive, fallback-loop, and timestamped conversations),
+edge cases (mixed timestamp formats, question detection),
 every API endpoint, and both Celery tasks. Tests run without Redis or a
 spaCy model installed.
 
@@ -116,4 +117,9 @@ spaCy model installed.
   are required. If `en_core_web_sm` is installed it can be plugged in without
   changing the public API.
 - `avg_response_time` is computed from optional ISO-8601 `timestamp` fields
-  on each message; without them it falls back to a demo default.
+  on each message; without them it falls back to a demo default (5 seconds).
+  Timestamps without a UTC offset are read as UTC, so naive and offset-aware
+  values can appear in the same conversation.
+- A user turn counts as a question if it contains `?` or a whole question word
+  (`how`, `what`, `why`, `when`, `where`, `which`, `can you`, `could you`);
+  words that merely contain one, like "show", do not.
