@@ -101,6 +101,47 @@ class AnalyzerBehaviorTests(TestCase):
         self.assertEqual(len(get_user_messages(HAPPY_PATH)), 3)
 
 
+class AnalyzerEdgeCaseTests(TestCase):
+    """Regression tests for timestamp mixing and question detection."""
+
+    def test_mixed_naive_and_aware_timestamps_do_not_crash(self):
+        messages = [
+            {'sender': 'user', 'message': 'Hi there', 'timestamp': '2024-01-01T10:00:00Z'},
+            {'sender': 'ai', 'message': 'Hello, how can I help?', 'timestamp': '2024-01-01T10:00:05'},
+        ]
+        result = analyze_conversation(messages)
+        self.assertEqual(result['avg_response_time'], 5.0)
+
+    def test_offset_timestamps_are_compared_in_absolute_time(self):
+        messages = [
+            {'sender': 'user', 'message': 'Hi', 'timestamp': '2024-01-01T10:00:00+00:00'},
+            {'sender': 'ai', 'message': 'Hello', 'timestamp': '2024-01-01T15:30:10+05:30'},
+        ]
+        self.assertEqual(analyze_conversation(messages)['avg_response_time'], 10.0)
+
+    def test_statement_containing_question_word_is_not_a_question(self):
+        # "shows" contains "how"; it is a statement, not an unanswered question.
+        messages = [
+            {'sender': 'user', 'message': 'That shows it, thanks'},
+            {'sender': 'ai', 'message': 'ok'},
+        ]
+        self.assertEqual(analyze_conversation(messages)['completeness_score'], 0.8)
+
+    def test_real_question_without_question_mark_still_counts(self):
+        messages = [
+            {'sender': 'user', 'message': 'how do I reset my password'},
+            {'sender': 'ai', 'message': 'Open settings and choose reset password.'},
+        ]
+        self.assertEqual(analyze_conversation(messages)['completeness_score'], 1.0)
+
+    def test_question_mark_mid_message_counts_as_question(self):
+        messages = [
+            {'sender': 'user', 'message': 'Is it open? Thanks'},
+            {'sender': 'ai', 'message': 'ok'},
+        ]
+        self.assertEqual(analyze_conversation(messages)['completeness_score'], 0.0)
+
+
 class ConversationApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
