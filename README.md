@@ -34,7 +34,7 @@ analysis/                  Django app
   serializers.py           API serializers (`message` field maps to Message.text)
   views.py                 Conversation / analyse / reports endpoints
   tasks.py                 Celery tasks (single + scheduled batch analysis)
-  tests.py                 18-test suite: analyzer contract, behavior, API, tasks
+  tests.py                 29-test suite: analyzer, API, filters, tasks
 conversation_analyzer/     Django project (settings, celery app)
 sample_data/               Example payload accepted verbatim by the API
 ```
@@ -123,3 +123,7 @@ spaCy model installed.
 - A user turn counts as a question if it contains `?` or a whole question word
   (`how`, `what`, `why`, `when`, `where`, `which`, `can you`, `could you`);
   words that merely contain one, like "show", do not.
+- `GET /api/reports/` filters: `sentiment`, `resolution` and `escalation_needed`.
+  Boolean filters accept `true`/`false`, `1`/`0` or `yes`/`no` (any case);
+  anything else returns 400. Results can be ordered with `?ordering=`
+  (`overall_score`, `created_at`); the default is highest score first.
