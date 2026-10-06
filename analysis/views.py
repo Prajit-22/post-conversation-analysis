@@ -1,4 +1,5 @@
 from rest_framework import viewsets, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
@@ -53,19 +54,39 @@ class AnalysisViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK
         )
 
+TRUE_VALUES = {'true', '1', 'yes'}
+FALSE_VALUES = {'false', '0', 'no'}
+
+
+def parse_bool_param(request, name):
+    """Return True/False for a boolean query parameter, or None when absent.
+
+    Unrecognized values raise a 400 instead of silently filtering on False.
+    """
+    raw = request.query_params.get(name)
+    if raw is None or raw == '':
+        return None
+    value = raw.strip().lower()
+    if value in TRUE_VALUES:
+        return True
+    if value in FALSE_VALUES:
+        return False
+    raise ValidationError({name: "Use true or false."})
+
+
 class ReportViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ConversationAnalysis.objects.all()
     serializer_class = ConversationAnalysisSerializer
-    filterset_fields = ['sentiment', 'resolution', 'escalation_needed']
     ordering_fields = ['overall_score', 'created_at']
     ordering = ['-overall_score']
+
     def get_queryset(self):
         queryset = super().get_queryset()
-        sentiment = self.request.query_params.get('sentiment', None)
+        sentiment = self.request.query_params.get('sentiment')
         if sentiment:
             queryset = queryset.filter(sentiment=sentiment)
-        resolution = self.request.query_params.get('resolution', None)
-        if resolution is not None:
-            resolution_bool = resolution.lower() == 'true'
-            queryset = queryset.filter(resolution=resolution_bool)
+        for name in ('resolution', 'escalation_needed'):
+            value = parse_bool_param(self.request, name)
+            if value is not None:
+                queryset = queryset.filter(**{name: value})
         return queryset
