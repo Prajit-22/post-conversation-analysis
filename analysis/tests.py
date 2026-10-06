@@ -211,6 +211,54 @@ class ConversationApiTests(TestCase):
         self.assertEqual(len(results), 1)
 
 
+class ReportFilterTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        upset = [
+            {'sender': 'user', 'message': 'This is terrible and awful, where is my refund?'},
+            {'sender': 'ai', 'message': "I don't know, try again later"},
+            {'sender': 'user', 'message': 'You are useless?'},
+            {'sender': 'ai', 'message': "I can't help with that."},
+            {'sender': 'ai', 'message': 'Unable to help.'},
+        ]
+        happy = [
+            {'sender': 'user', 'message': 'Thanks, great service'},
+            {'sender': 'ai', 'message': 'You are welcome, happy to help today.'},
+        ]
+        for messages in (upset, happy):
+            created = self.client.post(
+                '/api/conversations/', {'title': 't', 'messages': messages}, format='json')
+            self.client.post('/api/analyse/', {'conversation_id': created.data['id']}, format='json')
+
+    def _flags(self, query, field):
+        response = self.client.get('/api/reports/' + query)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return [row[field] for row in response.data['results']]
+
+    def test_fixture_has_one_escalated_and_one_not(self):
+        self.assertEqual(sorted(self._flags('', 'escalation_needed')), [False, True])
+
+    def test_escalation_filter_is_applied(self):
+        self.assertEqual(self._flags('?escalation_needed=true', 'escalation_needed'), [True])
+        self.assertEqual(self._flags('?escalation_needed=false', 'escalation_needed'), [False])
+
+    def test_resolution_accepts_one_and_zero(self):
+        self.assertEqual(self._flags('?resolution=1', 'resolution'), [True])
+        self.assertEqual(self._flags('?resolution=0', 'resolution'), [False])
+
+    def test_boolean_filters_are_case_insensitive(self):
+        self.assertEqual(self._flags('?resolution=TRUE', 'resolution'), [True])
+
+    def test_unrecognized_boolean_value_is_a_bad_request(self):
+        for query in ('?resolution=banana', '?escalation_needed=maybe'):
+            self.assertEqual(self.client.get('/api/reports/' + query).status_code,
+                             status.HTTP_400_BAD_REQUEST)
+
+    def test_filters_combine(self):
+        self.assertEqual(
+            self._flags('?escalation_needed=true&resolution=true', 'resolution'), [])
+
+
 class CeleryTaskTests(TestCase):
     def _conversation(self, analyzed=False):
         conversation = Conversation.objects.create(title='Refund request')
