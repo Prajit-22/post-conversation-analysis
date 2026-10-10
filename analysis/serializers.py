@@ -12,7 +12,7 @@ class MessageSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'timestamp']
 
 class ConversationSerializer(serializers.ModelSerializer):
-    messages = MessageSerializer(many=True)
+    messages = MessageSerializer(many=True, allow_empty=False)
     class Meta:
         model = Conversation
         fields = ['id', 'title', 'messages', 'created_at', 'is_analyzed']
