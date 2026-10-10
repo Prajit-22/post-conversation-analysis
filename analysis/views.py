@@ -34,6 +34,10 @@ class AnalysisViewSet(viewsets.ViewSet):
         conversation_id = serializer.validated_data['conversation_id']
         conversation = get_object_or_404(Conversation, id=conversation_id)
         messages = list(conversation.messages.values('sender', 'text'))
+        if not messages:
+            raise ValidationError(
+                {'conversation_id': 'Conversation has no messages to analyze.'}
+            )
         messages_formatted = [
             {'sender': msg['sender'], 'message': msg['text']}
             for msg in messages
