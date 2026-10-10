@@ -34,7 +34,7 @@ analysis/                  Django app
   serializers.py           API serializers (`message` field maps to Message.text)
   views.py                 Conversation / analyse / reports endpoints
   tasks.py                 Celery tasks (single + scheduled batch analysis)
-  tests.py                 29-test suite: analyzer, API, filters, tasks
+  tests.py                 32-test suite: analyzer, API, filters, tasks
 conversation_analyzer/     Django project (settings, celery app)
 sample_data/               Example payload accepted verbatim by the API
 ```
@@ -84,8 +84,8 @@ curl 'http://localhost:8000/api/reports/?sentiment=negative&ordering=-overall_sc
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/api/conversations/` | GET, POST | List/create conversations with nested messages |
-| `/api/analyse/` | POST | Run analysis for a `conversation_id` (idempotent) |
+| `/api/conversations/` | GET, POST | List/create conversations with nested messages (at least one message required) |
+| `/api/analyse/` | POST | Run analysis for a `conversation_id` (idempotent); 400 if it has no messages |
 | `/api/reports/` | GET | Paginated, filterable analysis results |
 | `/admin/` | — | Admin dashboard |
 
