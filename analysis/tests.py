@@ -211,6 +211,35 @@ class ConversationApiTests(TestCase):
         self.assertEqual(len(results), 1)
 
 
+class EmptyConversationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_create_rejects_empty_message_list(self):
+        response = self.client.post(
+            '/api/conversations/', {'title': 'Empty', 'messages': []}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('messages', response.data)
+        self.assertEqual(Conversation.objects.count(), 0)
+
+    def test_analyse_rejects_conversation_without_messages(self):
+        conversation = Conversation.objects.create(title='No messages')
+        response = self.client.post(
+            '/api/analyse/', {'conversation_id': conversation.id}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(ConversationAnalysis.objects.count(), 0)
+        conversation.refresh_from_db()
+        self.assertFalse(conversation.is_analyzed)
+
+    def test_task_reports_error_and_leaves_conversation_pending(self):
+        conversation = Conversation.objects.create(title='No messages')
+        result = analyze_conversation_task(conversation.id)
+        self.assertEqual(result['status'], 'error')
+        self.assertEqual(ConversationAnalysis.objects.count(), 0)
+        conversation.refresh_from_db()
+        self.assertFalse(conversation.is_analyzed)
+
+
 class ReportFilterTests(TestCase):
     def setUp(self):
         self.client = APIClient()
