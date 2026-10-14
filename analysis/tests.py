@@ -211,6 +211,32 @@ class ConversationApiTests(TestCase):
         self.assertEqual(len(results), 1)
 
 
+class TypographicApostropheTests(TestCase):
+    def conversation(self, apostrophe):
+        return [
+            {'sender': 'user', 'message': 'My order is late and I am upset'},
+            {'sender': 'ai', 'message': (
+                f"I{apostrophe}m sorry to hear that. I{apostrophe}m not sure what happened, "
+                f"I don{apostrophe}t know.")},
+        ]
+
+    def test_curly_apostrophes_score_like_straight_ones(self):
+        self.assertEqual(
+            analyze_conversation(self.conversation('\u2019')),
+            analyze_conversation(self.conversation("'")),
+        )
+
+    def test_curly_apostrophe_fallback_and_empathy_detected(self):
+        result = analyze_conversation(self.conversation('\u2019'))
+        self.assertEqual(result['fallback_count'], 1)
+        self.assertEqual(result['empathy_score'], 1.0)
+
+    def test_input_messages_are_not_modified(self):
+        messages = self.conversation('\u2019')
+        analyze_conversation(messages)
+        self.assertIn('\u2019', messages[1]['message'])
+
+
 class EmptyConversationTests(TestCase):
     def setUp(self):
         self.client = APIClient()
