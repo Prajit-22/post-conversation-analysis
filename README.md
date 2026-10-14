@@ -34,7 +34,7 @@ analysis/                  Django app
   serializers.py           API serializers (`message` field maps to Message.text)
   views.py                 Conversation / analyse / reports endpoints
   tasks.py                 Celery tasks (single + scheduled batch analysis)
-  tests.py                 32-test suite: analyzer, API, filters, tasks
+  tests.py                 35-test suite: analyzer, API, filters, tasks
 conversation_analyzer/     Django project (settings, celery app)
 sample_data/               Example payload accepted verbatim by the API
 ```
@@ -107,7 +107,7 @@ python manage.py test
 
 The suite covers the analyzer contract (score ranges, key completeness),
 metric behavior (positive, fallback-loop, and timestamped conversations),
-edge cases (mixed timestamp formats, question detection),
+edge cases (mixed timestamp formats, question detection, curly apostrophes in phrase matching),
 every API endpoint, and both Celery tasks. Tests run without Redis or a
 spaCy model installed.
 
