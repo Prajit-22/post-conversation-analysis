@@ -68,6 +68,14 @@ _QUESTION_RE = re.compile(
 )
 
 
+_APOSTROPHES = str.maketrans({'\u2019': "'", '\u2018': "'", '\u02bc': "'", '\u2032': "'"})
+
+
+def _normalize_apostrophes(text: str) -> str:
+    """Map typographic apostrophes to ASCII so "I\u2019m sorry" matches "i'm sorry"."""
+    return text.translate(_APOSTROPHES)
+
+
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
 
@@ -240,7 +248,10 @@ def analyze_conversation(messages: List[Dict]) -> Dict:
     Keys match the ``ConversationAnalysis`` model exactly so callers can pass
     the result straight to ``update_or_create(defaults=...)``.
     """
-    messages = [m for m in (messages or []) if m.get('message')]
+    messages = [
+        {**m, 'message': _normalize_apostrophes(m['message'])}
+        for m in (messages or []) if m.get('message')
+    ]
     ai_messages = get_ai_messages(messages)
 
     sentiment_label, sentiment_score = _sentiment(get_user_messages(messages))
