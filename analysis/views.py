@@ -33,13 +33,14 @@ class AnalysisViewSet(viewsets.ViewSet):
         serializer.is_valid(raise_exception=True)
         conversation_id = serializer.validated_data['conversation_id']
         conversation = get_object_or_404(Conversation, id=conversation_id)
-        messages = list(conversation.messages.values('sender', 'text'))
+        messages = list(conversation.messages.values('sender', 'text', 'timestamp'))
         if not messages:
             raise ValidationError(
                 {'conversation_id': 'Conversation has no messages to analyze.'}
             )
         messages_formatted = [
-            {'sender': msg['sender'], 'message': msg['text']}
+            {'sender': msg['sender'], 'message': msg['text'],
+             'timestamp': msg['timestamp'].isoformat()}
             for msg in messages
         ]
         analysis_results = analyze_conversation(messages_formatted)
