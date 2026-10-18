@@ -34,7 +34,7 @@ analysis/                  Django app
   serializers.py           API serializers (`message` field maps to Message.text)
   views.py                 Conversation / analyse / reports endpoints
   tasks.py                 Celery tasks (single + scheduled batch analysis)
-  tests.py                 35-test suite: analyzer, API, filters, tasks
+  tests.py                 39-test suite: analyzer, API, filters, tasks
 conversation_analyzer/     Django project (settings, celery app)
 sample_data/               Example payload accepted verbatim by the API
 ```
@@ -119,7 +119,10 @@ spaCy model installed.
 - `avg_response_time` is computed from optional ISO-8601 `timestamp` fields
   on each message; without them it falls back to a demo default (5 seconds).
   Timestamps without a UTC offset are read as UTC, so naive and offset-aware
-  values can appear in the same conversation.
+  values can appear in the same conversation. The import API accepts a
+  `timestamp` per message and stores it (messages without one are stamped at
+  save time), and both the analyse endpoint and the Celery task pass stored
+  timestamps to the analyzer, so response times reflect the real conversation.
 - A user turn counts as a question if it contains `?` or a whole question word
   (`how`, `what`, `why`, `when`, `where`, `which`, `can you`, `could you`);
   words that merely contain one, like "show", do not.
