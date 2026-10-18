@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Conversation(models.Model):
@@ -19,7 +20,9 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
     sender = models.CharField(max_length=20, choices=SENDER_CHOICES)
     text = models.TextField()
-    timestamp = models.DateTimeField(auto_now_add=True)
+    # default (not auto_now_add) so imported conversations can keep their real
+    # timestamps; messages created without one are stamped at save time.
+    timestamp = models.DateTimeField(default=timezone.now)
     class Meta:
         ordering = ['timestamp']
     def __str__(self):
