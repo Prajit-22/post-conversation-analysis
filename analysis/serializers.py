@@ -5,11 +5,13 @@ class MessageSerializer(serializers.ModelSerializer):
     # The public API exposes the model's `text` field as `message`, matching
     # the analyzer input format and sample_data/sample_conversation.json.
     message = serializers.CharField(source='text')
+    # Optional on import: the model stamps "now" when it is absent.
+    timestamp = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Message
         fields = ['id', 'sender', 'message', 'timestamp']
-        read_only_fields = ['id', 'timestamp']
+        read_only_fields = ['id']
 
 class ConversationSerializer(serializers.ModelSerializer):
     messages = MessageSerializer(many=True, allow_empty=False)
