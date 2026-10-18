@@ -347,3 +347,67 @@ class CeleryTaskTests(TestCase):
         self.assertTrue(pending.is_analyzed)
         # Already-analyzed conversation is not reprocessed.
         self.assertFalse(ConversationAnalysis.objects.filter(conversation=done).exists())
+
+
+TIMED_PAYLOAD = {
+    'title': 'Timed inquiry',
+    'messages': [
+        {'sender': 'user', 'message': 'Where is my refund?',
+         'timestamp': '2026-01-01T10:00:00Z'},
+        {'sender': 'ai', 'message': 'Your refund was processed today.',
+         'timestamp': '2026-01-01T10:00:30Z'},
+    ],
+}
+
+
+class TimestampImportTests(TestCase):
+    """Imported conversations keep their real timestamps end to end."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_api_import_preserves_message_timestamps(self):
+        response = self.client.post('/api/conversations/', TIMED_PAYLOAD, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        conversation = Conversation.objects.get(id=response.data['id'])
+        timestamps = [m.timestamp.isoformat() for m in conversation.messages.all()]
+        self.assertEqual(
+            timestamps,
+            ['2026-01-01T10:00:00+00:00', '2026-01-01T10:00:30+00:00'],
+        )
+
+    def test_messages_without_timestamps_still_get_one(self):
+        payload = {
+            'title': 'Untimed',
+            'messages': [
+                {'sender': 'user', 'message': 'Hi'},
+                {'sender': 'ai', 'message': 'Hello, how can I help?'},
+            ],
+        }
+        response = self.client.post('/api/conversations/', payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        conversation = Conversation.objects.get(id=response.data['id'])
+        for message in conversation.messages.all():
+            self.assertIsNotNone(message.timestamp)
+
+    def test_analyze_endpoint_uses_stored_timestamps(self):
+        response = self.client.post('/api/conversations/', TIMED_PAYLOAD, format='json')
+        conversation_id = response.data['id']
+        response = self.client.post('/api/analyse/', {'conversation_id': conversation_id}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['analysis']['avg_response_time'], 30.0)
+
+    def test_celery_task_uses_stored_timestamps(self):
+        conversation = Conversation.objects.create(title='Timed task')
+        Message.objects.create(
+            conversation=conversation, sender='user', text='Where is my refund?',
+            timestamp='2026-01-01T10:00:00+00:00',
+        )
+        Message.objects.create(
+            conversation=conversation, sender='ai', text='Your refund was processed today.',
+            timestamp='2026-01-01T10:00:45+00:00',
+        )
+        result = analyze_conversation_task(conversation.id)
+        self.assertEqual(result['status'], 'success')
+        analysis = ConversationAnalysis.objects.get(conversation=conversation)
+        self.assertEqual(analysis.avg_response_time, 45.0)
