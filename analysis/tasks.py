@@ -7,11 +7,12 @@ from .analyzers import analyze_conversation
 def analyze_conversation_task(conversation_id):
     try:
         conversation = Conversation.objects.get(id=conversation_id)
-        messages = list(conversation.messages.values('sender', 'text'))
+        messages = list(conversation.messages.values('sender', 'text', 'timestamp'))
         if not messages:
             return {'conversation_id': conversation_id, 'status': 'error',
                     'message': 'Conversation has no messages to analyze.'}
-        messages_formatted = [{'sender': msg['sender'], 'message': msg['text']} for msg in messages]
+        messages_formatted = [{'sender': msg['sender'], 'message': msg['text'],
+                               'timestamp': msg['timestamp'].isoformat()} for msg in messages]
         analysis_results = analyze_conversation(messages_formatted)
         analysis, created = ConversationAnalysis.objects.update_or_create(
             conversation=conversation,
