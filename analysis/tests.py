@@ -314,6 +314,63 @@ class ReportFilterTests(TestCase):
             self._flags('?escalation_needed=true&resolution=true', 'resolution'), [])
 
 
+class ReportSummaryTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        upset = [
+            {'sender': 'user', 'message': 'This is terrible and awful, where is my refund?'},
+            {'sender': 'ai', 'message': "I don't know, try again later"},
+            {'sender': 'user', 'message': 'You are useless?'},
+            {'sender': 'ai', 'message': "I can't help with that."},
+            {'sender': 'ai', 'message': 'Unable to help.'},
+        ]
+        happy = [
+            {'sender': 'user', 'message': 'Thanks, great service'},
+            {'sender': 'ai', 'message': 'You are welcome, happy to help today.'},
+        ]
+        for messages in (upset, happy):
+            created = self.client.post(
+                '/api/conversations/', {'title': 't', 'messages': messages}, format='json')
+            self.client.post('/api/analyse/', {'conversation_id': created.data['id']}, format='json')
+
+    def test_summary_aggregates_all_analyses(self):
+        response = self.client.get('/api/reports/summary/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        self.assertEqual(data['total_analyses'], 2)
+        self.assertEqual(data['resolved'], 1)
+        self.assertEqual(data['resolution_rate'], 0.5)
+        self.assertEqual(data['escalations'], 1)
+        self.assertEqual(data['by_sentiment'], {'positive': 1, 'neutral': 0, 'negative': 1})
+        from django.db.models import Avg
+        expected = ConversationAnalysis.objects.aggregate(a=Avg('overall_score'))['a']
+        self.assertAlmostEqual(data['average_overall_score'], round(expected, 3))
+        self.assertIsNotNone(data['average_response_time'])
+        self.assertIsNotNone(data['average_fallback_count'])
+
+    def test_summary_respects_filters(self):
+        data = self.client.get('/api/reports/summary/?sentiment=negative').data
+        self.assertEqual(data['total_analyses'], 1)
+        self.assertEqual(data['escalations'], 1)
+        self.assertEqual(data['resolved'], 0)
+        self.assertEqual(data['resolution_rate'], 0.0)
+        self.assertEqual(data['by_sentiment'], {'positive': 0, 'neutral': 0, 'negative': 1})
+        data = self.client.get('/api/reports/summary/?resolution=true').data
+        self.assertEqual(data['total_analyses'], 1)
+        self.assertEqual(data['resolution_rate'], 1.0)
+
+    def test_summary_on_empty_store_is_zero_filled(self):
+        ConversationAnalysis.objects.all().delete()
+        data = self.client.get('/api/reports/summary/').data
+        self.assertEqual(data['total_analyses'], 0)
+        self.assertEqual(data['resolved'], 0)
+        self.assertIsNone(data['resolution_rate'])
+        self.assertEqual(data['escalations'], 0)
+        self.assertIsNone(data['average_overall_score'])
+        self.assertIsNone(data['average_response_time'])
+        self.assertEqual(data['by_sentiment'], {'positive': 0, 'neutral': 0, 'negative': 0})
+
+
 class CeleryTaskTests(TestCase):
     def _conversation(self, analyzed=False):
         conversation = Conversation.objects.create(title='Refund request')
