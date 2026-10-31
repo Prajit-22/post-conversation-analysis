@@ -314,6 +314,62 @@ class ReportFilterTests(TestCase):
             self._flags('?escalation_needed=true&resolution=true', 'resolution'), [])
 
 
+class ReportScoreFilterTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        upset = [
+            {'sender': 'user', 'message': 'This is terrible and awful, where is my refund?'},
+            {'sender': 'ai', 'message': "I don't know, try again later"},
+            {'sender': 'user', 'message': 'You are useless?'},
+            {'sender': 'ai', 'message': "I can't help with that."},
+            {'sender': 'ai', 'message': 'Unable to help.'},
+        ]
+        happy = [
+            {'sender': 'user', 'message': 'Thanks, great service'},
+            {'sender': 'ai', 'message': 'You are welcome, happy to help today.'},
+        ]
+        for messages in (upset, happy):
+            created = self.client.post(
+                '/api/conversations/', {'title': 't', 'messages': messages}, format='json')
+            self.client.post('/api/analyse/', {'conversation_id': created.data['id']}, format='json')
+        # Ordered highest-first by the endpoint's default ordering.
+        self.high, self.low = [
+            row['overall_score'] for row in self.client.get('/api/reports/').data['results']]
+        self.assertGreater(self.high, self.low)
+
+    def _scores(self, query):
+        response = self.client.get('/api/reports/' + query)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return [row['overall_score'] for row in response.data['results']]
+
+    def test_min_score_keeps_only_high_scorers(self):
+        self.assertEqual(self._scores(f'?min_score={self.high}'), [self.high])
+
+    def test_max_score_keeps_only_low_scorers(self):
+        self.assertEqual(self._scores(f'?max_score={self.low}'), [self.low])
+
+    def test_band_boundaries_are_inclusive(self):
+        self.assertEqual(
+            self._scores(f'?min_score={self.low}&max_score={self.low}'), [self.low])
+
+    def test_full_band_returns_everything(self):
+        self.assertEqual(self._scores('?min_score=0&max_score=1'), [self.high, self.low])
+
+    def test_inverted_band_is_a_bad_request(self):
+        response = self.client.get('/api/reports/?min_score=0.9&max_score=0.1')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_non_numeric_and_out_of_range_values_are_bad_requests(self):
+        for query in ('?min_score=banana', '?max_score=2', '?min_score=-0.5'):
+            self.assertEqual(self.client.get('/api/reports/' + query).status_code,
+                             status.HTTP_400_BAD_REQUEST)
+
+    def test_summary_respects_score_band(self):
+        data = self.client.get(f'/api/reports/summary/?min_score={self.high}').data
+        self.assertEqual(data['total_analyses'], 1)
+        self.assertAlmostEqual(data['average_overall_score'], round(self.high, 3))
+
+
 class ReportSummaryTests(TestCase):
     def setUp(self):
         self.client = APIClient()
