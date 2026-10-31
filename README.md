@@ -13,8 +13,9 @@ background analysis and a Django admin dashboard for reviewing results.
   time, plus fallback detection, resolution status, and escalation flags.
 - **On-demand and scheduled analysis** — trigger analysis through the API, or
   let Celery Beat process pending conversations every minute.
-- **Reports API** — list and filter analyses by sentiment and resolution,
-  ordered by overall score, plus a summary rollup over the filtered set.
+- **Reports API** — list and filter analyses by sentiment, resolution,
+  escalation and overall-score band, ordered by overall score, plus a
+  summary rollup over the filtered set.
 - **Admin dashboard** — manage conversations, messages, and analyses from
   Django admin.
 
@@ -34,7 +35,7 @@ analysis/                  Django app
   serializers.py           API serializers (`message` field maps to Message.text)
   views.py                 Conversation / analyse / reports endpoints
   tasks.py                 Celery tasks (single + scheduled batch analysis)
-  tests.py                 42-test suite: analyzer, API, filters, summary, tasks
+  tests.py                 49-test suite: analyzer, API, filters, summary, tasks
 conversation_analyzer/     Django project (settings, celery app)
 sample_data/               Example payload accepted verbatim by the API
 ```
@@ -129,7 +130,9 @@ spaCy model installed.
   words that merely contain one, like "show", do not.
 - `GET /api/reports/` filters: `sentiment`, `resolution` and `escalation_needed`.
   Boolean filters accept `true`/`false`, `1`/`0` or `yes`/`no` (any case);
-  anything else returns 400. Results can be ordered with `?ordering=`
+  anything else returns 400. Numeric `min_score`/`max_score` bound the
+  `overall_score` (0..1, boundaries inclusive); a non-numeric,
+  out-of-range or inverted band returns 400. Results can be ordered with `?ordering=`
   (`overall_score`, `created_at`); the default is highest score first.
   `GET /api/reports/summary/` applies the same filters and returns
   `total_analyses`, `resolved`, `resolution_rate`, `escalations`,
