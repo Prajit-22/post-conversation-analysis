@@ -81,6 +81,24 @@ def parse_bool_param(request, name):
     raise ValidationError({name: "Use true or false."})
 
 
+def parse_score_param(request, name):
+    """Return a float in [0, 1] for a score-band query parameter, or None when absent.
+
+    Non-numeric or out-of-range values (including NaN and infinity) raise a
+    400 instead of silently ignoring the band, matching parse_bool_param.
+    """
+    raw = request.query_params.get(name)
+    if raw is None or raw == '':
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValidationError({name: "Use a number between 0 and 1."})
+    if not 0.0 <= value <= 1.0:
+        raise ValidationError({name: "Use a number between 0 and 1."})
+    return value
+
+
 class ReportViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ConversationAnalysis.objects.all()
     serializer_class = ConversationAnalysisSerializer
@@ -96,6 +114,14 @@ class ReportViewSet(viewsets.ReadOnlyModelViewSet):
             value = parse_bool_param(self.request, name)
             if value is not None:
                 queryset = queryset.filter(**{name: value})
+        min_score = parse_score_param(self.request, 'min_score')
+        max_score = parse_score_param(self.request, 'max_score')
+        if min_score is not None and max_score is not None and min_score > max_score:
+            raise ValidationError({'min_score': "min_score cannot exceed max_score."})
+        if min_score is not None:
+            queryset = queryset.filter(overall_score__gte=min_score)
+        if max_score is not None:
+            queryset = queryset.filter(overall_score__lte=max_score)
         return queryset
 
     @action(detail=False, methods=['get'])
