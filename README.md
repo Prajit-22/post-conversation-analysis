@@ -15,7 +15,7 @@ background analysis and a Django admin dashboard for reviewing results.
   let Celery Beat process pending conversations every minute.
 - **Reports API** — list and filter analyses by sentiment, resolution,
   escalation and overall-score band, ordered by overall score, plus a
-  summary rollup over the filtered set.
+  summary rollup and a CSV export over the filtered set.
 - **Admin dashboard** — manage conversations, messages, and analyses from
   Django admin.
 
@@ -35,7 +35,7 @@ analysis/                  Django app
   serializers.py           API serializers (`message` field maps to Message.text)
   views.py                 Conversation / analyse / reports endpoints
   tasks.py                 Celery tasks (single + scheduled batch analysis)
-  tests.py                 49-test suite: analyzer, API, filters, summary, tasks
+  tests.py                 58-test suite: analyzer, API, filters, summary, export, tasks
 conversation_analyzer/     Django project (settings, celery app)
 sample_data/               Example payload accepted verbatim by the API
 ```
@@ -89,6 +89,7 @@ curl 'http://localhost:8000/api/reports/?sentiment=negative&ordering=-overall_sc
 | `/api/analyse/` | POST | Run analysis for a `conversation_id` (idempotent); 400 if it has no messages |
 | `/api/reports/` | GET | Paginated, filterable analysis results |
 | `/api/reports/summary/` | GET | Aggregate rollup (totals, resolution rate, escalations, averages, sentiment breakdown) over the filtered set |
+| `/api/reports/export/` | GET | CSV download of the filtered set (every matching row, no pagination) |
 | `/admin/` | — | Admin dashboard |
 
 ## Configuration
@@ -139,3 +140,9 @@ spaCy model installed.
   `average_overall_score`, `average_response_time`,
   `average_fallback_count`, and a zero-filled `by_sentiment` breakdown;
   rate and averages are null when no analyses match.
+  `GET /api/reports/export/` applies the same filters and ordering but
+  ignores pagination, streaming every matching row as a CSV attachment
+  (`reports.csv`) with conversation id/title, all metric scores, sentiment,
+  response time, resolution/escalation flags, fallback count, and analysis
+  timestamp; scores are rounded to three decimals (response time to two).
+  Invalid filter values return 400 here too.
