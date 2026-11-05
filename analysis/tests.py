@@ -2,6 +2,8 @@
 
 Run with: python manage.py test
 """
+import csv
+import io
 import json
 
 from django.test import TestCase
@@ -524,3 +526,96 @@ class TimestampImportTests(TestCase):
         self.assertEqual(result['status'], 'success')
         analysis = ConversationAnalysis.objects.get(conversation=conversation)
         self.assertEqual(analysis.avg_response_time, 45.0)
+class ReportExportTests(TestCase):
+    """The export endpoint streams the filtered report set as CSV."""
+
+    def setUp(self):
+        self.client = APIClient()
+        upset = [
+            {'sender': 'user', 'message': 'This is terrible and awful, where is my refund?'},
+            {'sender': 'ai', 'message': "I don't know, try again later"},
+            {'sender': 'user', 'message': 'You are useless?'},
+            {'sender': 'ai', 'message': "I can't help with that."},
+            {'sender': 'ai', 'message': 'Unable to help.'},
+        ]
+        happy = [
+            {'sender': 'user', 'message': 'Thanks, great service'},
+            {'sender': 'ai', 'message': 'You are welcome, happy to help today.'},
+        ]
+        for messages in (upset, happy):
+            created = self.client.post(
+                '/api/conversations/', {'title': 't', 'messages': messages}, format='json')
+            self.client.post('/api/analyse/', {'conversation_id': created.data['id']}, format='json')
+
+    def _rows(self, query=''):
+        response = self.client.get('/api/reports/export/' + query)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = list(csv.reader(io.StringIO(response.content.decode('utf-8'))))
+        return rows, response
+
+    def test_export_is_a_csv_attachment(self):
+        _, response = self._rows()
+        self.assertEqual(response['Content-Type'], 'text/csv')
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertIn('reports.csv', response['Content-Disposition'])
+
+    def test_export_has_header_and_one_row_per_analysis(self):
+        rows, _ = self._rows()
+        self.assertEqual(len(rows), 3)
+        header = rows[0]
+        self.assertEqual(header[0], 'conversation_id')
+        self.assertIn('overall_score', header)
+        self.assertIn('sentiment', header)
+        for data_row in rows[1:]:
+            self.assertEqual(len(data_row), len(header))
+
+    def test_export_row_values_match_the_analysis(self):
+        rows, _ = self._rows()
+        header = rows[0]
+        record = dict(zip(header, rows[1]))
+        analysis = ConversationAnalysis.objects.get(
+            conversation_id=int(record['conversation_id']))
+        self.assertEqual(float(record['overall_score']),
+                         round(analysis.overall_score, 3))
+        self.assertEqual(record['sentiment'], analysis.sentiment)
+        self.assertEqual(record['conversation_title'], analysis.conversation.title)
+        self.assertEqual(record['resolution'], str(analysis.resolution))
+
+    def test_export_default_order_is_highest_score_first(self):
+        rows, _ = self._rows()
+        scores = [float(row[2]) for row in rows[1:]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
+    def test_export_respects_sentiment_filter(self):
+        rows, _ = self._rows('?sentiment=negative')
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][8], 'negative')
+
+    def test_export_respects_score_band(self):
+        rows, _ = self._rows('?min_score=0.9')
+        self.assertLessEqual(len(rows), 3)
+        for row in rows[1:]:
+            self.assertGreaterEqual(float(row[2]), 0.9)
+
+    def test_export_ignores_pagination(self):
+        # PAGE_SIZE is 20; create enough extra analyses that a paginated
+        # response would truncate the export.
+        for i in range(21):
+            conversation = Conversation.objects.create(title=f'bulk {i}')
+            ConversationAnalysis.objects.create(
+                conversation=conversation,
+                clarity_score=0.5, relevance_score=0.5, accuracy_score=0.5,
+                completeness_score=0.5, sentiment='neutral', sentiment_score=0.0,
+                empathy_score=0.5, avg_response_time=5.0, resolution=True,
+                escalation_needed=False, fallback_count=0, overall_score=0.5,
+            )
+        rows, _ = self._rows()
+        self.assertEqual(len(rows), 1 + 23)
+
+    def test_export_empty_set_returns_header_only(self):
+        rows, _ = self._rows('?sentiment=positive&min_score=0.999')
+        self.assertEqual(len(rows), 1)
+
+    def test_export_rejects_unrecognized_boolean_filter(self):
+        response = self.client.get('/api/reports/export/?resolution=maybe')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
