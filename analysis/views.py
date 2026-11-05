@@ -1,3 +1,6 @@
+import csv
+
+from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -123,6 +126,46 @@ class ReportViewSet(viewsets.ReadOnlyModelViewSet):
         if max_score is not None:
             queryset = queryset.filter(overall_score__lte=max_score)
         return queryset
+
+
+    @action(detail=False, methods=['get'])
+    def export(self, request):
+        """Download the filtered report set as a CSV attachment.
+
+        Applies the same filters and ordering as the list endpoint, but
+        ignores pagination, so an export always contains every matching row.
+        """
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="reports.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            'conversation_id', 'conversation_title',
+            'overall_score', 'clarity_score', 'relevance_score',
+            'accuracy_score', 'completeness_score', 'empathy_score',
+            'sentiment', 'sentiment_score', 'avg_response_time',
+            'resolution', 'escalation_needed', 'fallback_count',
+            'analyzed_at',
+        ])
+        queryset = self.filter_queryset(self.get_queryset())
+        for analysis in queryset.select_related('conversation'):
+            writer.writerow([
+                analysis.conversation_id,
+                analysis.conversation.title,
+                round(analysis.overall_score, 3),
+                round(analysis.clarity_score, 3),
+                round(analysis.relevance_score, 3),
+                round(analysis.accuracy_score, 3),
+                round(analysis.completeness_score, 3),
+                round(analysis.empathy_score, 3),
+                analysis.sentiment,
+                round(analysis.sentiment_score, 3),
+                round(analysis.avg_response_time, 2),
+                analysis.resolution,
+                analysis.escalation_needed,
+                analysis.fallback_count,
+                analysis.created_at.isoformat(),
+            ])
+        return response
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
