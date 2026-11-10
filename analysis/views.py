@@ -173,6 +173,8 @@ class ReportViewSet(viewsets.ReadOnlyModelViewSet):
 
         Applies the same sentiment/resolution/escalation filters as the list
         endpoint, so a filtered summary describes exactly the rows you see.
+        ``average_scores`` carries a mean per analysis metric over the same
+        set, so a weak spot (say clarity) is visible without listing rows.
         """
         queryset = self.get_queryset()
         total = queryset.count()
@@ -182,6 +184,12 @@ class ReportViewSet(viewsets.ReadOnlyModelViewSet):
             avg_overall=Avg('overall_score'),
             avg_response=Avg('avg_response_time'),
             avg_fallbacks=Avg('fallback_count'),
+            avg_clarity=Avg('clarity_score'),
+            avg_relevance=Avg('relevance_score'),
+            avg_accuracy=Avg('accuracy_score'),
+            avg_completeness=Avg('completeness_score'),
+            avg_empathy=Avg('empathy_score'),
+            avg_sentiment=Avg('sentiment_score'),
         )
         by_sentiment = {value: 0 for value, _ in ConversationAnalysis.SENTIMENT_CHOICES}
         for row in queryset.values('sentiment').annotate(count=Count('id')):
@@ -198,5 +206,13 @@ class ReportViewSet(viewsets.ReadOnlyModelViewSet):
             'average_overall_score': rounded(aggregates['avg_overall'], 3),
             'average_response_time': rounded(aggregates['avg_response'], 2),
             'average_fallback_count': rounded(aggregates['avg_fallbacks'], 2),
+            'average_scores': {
+                'clarity': rounded(aggregates['avg_clarity'], 3),
+                'relevance': rounded(aggregates['avg_relevance'], 3),
+                'accuracy': rounded(aggregates['avg_accuracy'], 3),
+                'completeness': rounded(aggregates['avg_completeness'], 3),
+                'empathy': rounded(aggregates['avg_empathy'], 3),
+                'sentiment': rounded(aggregates['avg_sentiment'], 3),
+            },
             'by_sentiment': by_sentiment,
         })
