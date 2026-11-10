@@ -417,6 +417,34 @@ class ReportSummaryTests(TestCase):
         self.assertEqual(data['total_analyses'], 1)
         self.assertEqual(data['resolution_rate'], 1.0)
 
+    def test_summary_reports_per_metric_averages(self):
+        data = self.client.get('/api/reports/summary/').data
+        self.assertEqual(set(data['average_scores']),
+                         {'clarity', 'relevance', 'accuracy', 'completeness',
+                          'empathy', 'sentiment'})
+        from django.db.models import Avg
+        for key in data['average_scores']:
+            expected = ConversationAnalysis.objects.aggregate(
+                a=Avg(f'{key}_score'))['a']
+            self.assertAlmostEqual(data['average_scores'][key], round(expected, 3))
+
+    def test_summary_metric_averages_respect_filters(self):
+        data = self.client.get('/api/reports/summary/?sentiment=negative').data
+        negative = ConversationAnalysis.objects.get(sentiment='negative')
+        for key in data['average_scores']:
+            # A single-row filter means each average is that row's own score.
+            self.assertAlmostEqual(
+                data['average_scores'][key],
+                round(getattr(negative, f'{key}_score'), 3))
+
+    def test_summary_metric_averages_are_none_on_empty(self):
+        ConversationAnalysis.objects.all().delete()
+        data = self.client.get('/api/reports/summary/').data
+        self.assertEqual(data['average_scores'],
+                         {key: None for key in
+                          ('clarity', 'relevance', 'accuracy', 'completeness',
+                           'empathy', 'sentiment')})
+
     def test_summary_on_empty_store_is_zero_filled(self):
         ConversationAnalysis.objects.all().delete()
         data = self.client.get('/api/reports/summary/').data
