@@ -35,7 +35,7 @@ analysis/                  Django app
   serializers.py           API serializers (`message` field maps to Message.text)
   views.py                 Conversation / analyse / reports endpoints
   tasks.py                 Celery tasks (single + scheduled batch analysis)
-  tests.py                 58-test suite: analyzer, API, filters, summary, export, tasks
+  tests.py                 61-test suite: analyzer, API, filters, summary, export, tasks
 conversation_analyzer/     Django project (settings, celery app)
 sample_data/               Example payload accepted verbatim by the API
 ```
@@ -88,7 +88,7 @@ curl 'http://localhost:8000/api/reports/?sentiment=negative&ordering=-overall_sc
 | `/api/conversations/` | GET, POST | List/create conversations with nested messages (at least one message required) |
 | `/api/analyse/` | POST | Run analysis for a `conversation_id` (idempotent); 400 if it has no messages |
 | `/api/reports/` | GET | Paginated, filterable analysis results |
-| `/api/reports/summary/` | GET | Aggregate rollup (totals, resolution rate, escalations, averages, sentiment breakdown) over the filtered set |
+| `/api/reports/summary/` | GET | Aggregate rollup (totals, resolution rate, escalations, overall and per-metric averages, sentiment breakdown) over the filtered set |
 | `/api/reports/export/` | GET | CSV download of the filtered set (every matching row, no pagination) |
 | `/admin/` | — | Admin dashboard |
 
@@ -138,7 +138,9 @@ spaCy model installed.
   `GET /api/reports/summary/` applies the same filters and returns
   `total_analyses`, `resolved`, `resolution_rate`, `escalations`,
   `average_overall_score`, `average_response_time`,
-  `average_fallback_count`, and a zero-filled `by_sentiment` breakdown;
+  `average_fallback_count`, an `average_scores` object with the mean of each
+  metric (clarity, relevance, accuracy, completeness, empathy, sentiment)
+  over the same filtered set, and a zero-filled `by_sentiment` breakdown;
   rate and averages are null when no analyses match.
   `GET /api/reports/export/` applies the same filters and ordering but
   ignores pagination, streaming every matching row as a CSV attachment
