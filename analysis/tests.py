@@ -445,6 +445,42 @@ class ReportSummaryTests(TestCase):
                           ('clarity', 'relevance', 'accuracy', 'completeness',
                            'empathy', 'sentiment')})
 
+    def _make_analysis(self, overall, sentiment='neutral'):
+        conversation = Conversation.objects.create(title=f'score {overall}')
+        return ConversationAnalysis.objects.create(
+            conversation=conversation,
+            clarity_score=0.5, relevance_score=0.5, accuracy_score=0.5,
+            completeness_score=0.5, sentiment=sentiment, sentiment_score=0.0,
+            empathy_score=0.5, avg_response_time=1.0, resolution=True,
+            escalation_needed=False, fallback_count=0, overall_score=overall)
+
+    def test_summary_score_distribution_bands(self):
+        ConversationAnalysis.objects.all().delete()
+        for score in (0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 1.0):
+            self._make_analysis(score)
+        data = self.client.get('/api/reports/summary/').data
+        # Bands are lower-inclusive and upper-exclusive; the top band is
+        # closed so a perfect 1.0 counts.
+        self.assertEqual(data['score_distribution'], {
+            '0-0.25': 2, '0.25-0.5': 2, '0.5-0.75': 2, '0.75-1': 3})
+        self.assertEqual(sum(data['score_distribution'].values()),
+                         data['total_analyses'])
+
+    def test_summary_score_distribution_respects_filters(self):
+        ConversationAnalysis.objects.all().delete()
+        self._make_analysis(0.1, sentiment='negative')
+        self._make_analysis(0.9, sentiment='positive')
+        self._make_analysis(0.95, sentiment='positive')
+        data = self.client.get('/api/reports/summary/?sentiment=positive').data
+        self.assertEqual(data['score_distribution'], {
+            '0-0.25': 0, '0.25-0.5': 0, '0.5-0.75': 0, '0.75-1': 2})
+
+    def test_summary_score_distribution_zero_filled_on_empty(self):
+        ConversationAnalysis.objects.all().delete()
+        data = self.client.get('/api/reports/summary/').data
+        self.assertEqual(data['score_distribution'], {
+            '0-0.25': 0, '0.25-0.5': 0, '0.5-0.75': 0, '0.75-1': 0})
+
     def test_summary_on_empty_store_is_zero_filled(self):
         ConversationAnalysis.objects.all().delete()
         data = self.client.get('/api/reports/summary/').data
