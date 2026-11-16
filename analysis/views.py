@@ -102,6 +102,12 @@ def parse_score_param(request, name):
     return value
 
 
+# Overall-score histogram bands for the summary rollup. Bands are
+# lower-inclusive and upper-exclusive, except the top band, which is closed
+# so a perfect 1.0 is counted.
+SCORE_BANDS = [(0.0, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1.0)]
+
+
 class ReportViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ConversationAnalysis.objects.all()
     serializer_class = ConversationAnalysisSerializer
@@ -175,6 +181,8 @@ class ReportViewSet(viewsets.ReadOnlyModelViewSet):
         endpoint, so a filtered summary describes exactly the rows you see.
         ``average_scores`` carries a mean per analysis metric over the same
         set, so a weak spot (say clarity) is visible without listing rows.
+        ``score_distribution`` counts the same rows in fixed overall-score
+        bands, so a dashboard can show the spread, not just the mean.
         """
         queryset = self.get_queryset()
         total = queryset.count()
@@ -215,4 +223,17 @@ class ReportViewSet(viewsets.ReadOnlyModelViewSet):
                 'sentiment': rounded(aggregates['avg_sentiment'], 3),
             },
             'by_sentiment': by_sentiment,
+            'score_distribution': self._score_distribution(queryset),
         })
+
+    @staticmethod
+    def _score_distribution(queryset):
+        distribution = {}
+        for index, (low, high) in enumerate(SCORE_BANDS):
+            band = queryset.filter(overall_score__gte=low)
+            if index == len(SCORE_BANDS) - 1:
+                band = band.filter(overall_score__lte=high)
+            else:
+                band = band.filter(overall_score__lt=high)
+            distribution[f"{low:g}-{high:g}"] = band.count()
+        return distribution
